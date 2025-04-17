@@ -1,0 +1,81 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Artillery Chain Reaction Game Rules
+
+## Variables
+Config.BOARD_SIZE is 8
+
+## Game Board
+
+- Grid-based board of size `Config.BOARD_SIZE x Config.BOARD_SIZE`
+- Each cell is `Config.CELL_SIZE` pixels selected to fit the application's window
+- Board positioned at `(boardX, boardY)` with UI margin
+
+## Game Pieces
+- Two types of artillery pieces:
+  - Horizontal pieces (green): Fire in four cardinal directions (up, down, left, right)
+  - Diagonal pieces (red): Fire in four diagonal directions
+    - Each artillery piece has:
+    - Base with colored center
+    - Barrels showing the 4 firing directions all emanating from a central turret on top of the base
+    - Barrels resemble a top view of a gun barrel and are colored a dull metallic gray
+    - Detonation indicators showing impact zones
+- Monoliths:
+  - Placed on board during level initialization in tiles that are not detonation zones for the solution to the level
+  - Level is lost if a monolith is blown up
+  - Monoliths should look like ruined ancient buildings and there should be several random variants of them
+- Targets
+  - 3 concentric red and white rings like an archery target as seen from above
+
+## Gameplay Mechanics
+- Pieces start in tray below board
+- Drag pieces from tray to board
+- Placement rules:
+  - Only on empty cells
+  - Cannot place on targets, monoliths or other artillery units
+  - Shows detonation pattern when placed
+  - Pieces can be moved around board or even placed back in the tray below board
+- Chain reaction system:
+  - "Detonate" button triggers reactions
+  - Selected piece fires first (random if none selected)
+  - Hit pieces fire in sequence
+  - Reactions continue until no more pieces hit
+
+## Level Generation Rules
+- Level 1:
+  - 1 horizontal piece
+  - 1 target placed in center
+- Level 2:
+  - 1 diagonal piece
+  - 2 targets placed separated by one space vertically or horizontally
+- Level 3+:
+  - Number of artillery pieces: 2 + (level-2)/2, capped at 8
+  - Number of Targets: 3 + (level - 2) / 5 capped at 5
+  - Random mix of horizontal and diagonal pieces
+  - First piece placed anywhere except edges
+  - Subsequent pieces placed in detonation zones of existing pieces
+  - Each target must be in detonation zone of at least one piece
+  - Targets cannot be placed on existing targets
+  - Targets placed in detonation zones that do not have an artillery piece or target in them already
+  - Each piece can only have one target in its detonation zone
+
+## Objectives
+- Arrange pieces on board to hit all targets in chain reaction
+- Level complete when all targets hit
+- If a detonation fails to destroy all targets, the targets and any detonated artillery pieces are restored for another attempt to beat the level
+
+## UI Elements
+- Score display
+- Detonate button
+- Undo button that will let you undo every move up through the first move
+- Level completion screen
+- Continue button
+
+## Special Rules
+- Return pieces to tray when dropped in tray area
+- Invalid placements return to previous position
+- Undo functionality tracks piece positions
+- Detonation patterns shown on selection/placement
