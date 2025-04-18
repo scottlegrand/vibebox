@@ -1,7 +1,8 @@
 import pygame
 import sys
+import random
 from config import *
-from pieces import ArtilleryPiece, Target, Monolith
+from pieces import ArtilleryPiece, Target, Monolith, Projectile, Particle
 
 class Game:
     def __init__(self):
@@ -22,6 +23,11 @@ class Game:
         self.move_history = []  # Track all moves for undo functionality
         self.detonation_brightness = {}  # Track brightness of each tile
         self.was_dragged = False  # Track if piece was actually moved
+        self.projectiles = []  # Active projectiles
+        self.particles = []    # Active particles
+        self.detonation_sequence = []  # Pieces to detonate in order
+        self.current_detonation_index = 0
+        self.detonation_delay = 0  # Frame counter for detonation timing
         
         # Add test pieces
         self.add_test_pieces()
@@ -334,6 +340,67 @@ class Game:
                         # Increment brightness for this tile
                         self.detonation_brightness[key] = self.detonation_brightness.get(key, 0) + 1
 
+    def start_detonation(self):
+        if not self.selected_piece:
+            # If no piece selected, choose a random piece on the board
+            board_pieces = [p for p in self.pieces if p.y < TRAY_Y]  # Pieces on board have y < TRAY_Y
+            if not board_pieces:
+                return
+            self.selected_piece = random.choice(board_pieces)
+            
+        self.detonation_sequence = [self.selected_piece]
+        self.current_detonation_index = 0
+        self.detonation_delay = 0
+        self.projectiles = []
+        self.particles = []
+        
+    def update_detonation(self):
+        if not self.detonation_sequence:
+            return
+            
+        # Update all projectiles
+        for projectile in self.projectiles[:]:
+            projectile.update()
+            if projectile.is_off_screen():
+                # Create explosion at projectile's final position
+                print(f"Creating explosion at ({projectile.x}, {projectile.y})")
+                for _ in range(16):  # Increased from 8 to 16 particles per explosion
+                    particle = Particle(self, projectile.x, projectile.y, 
+                                     self.detonation_sequence[0].base_color)  # Always use first piece's color
+                    self.particles.append(particle)
+                self.projectiles.remove(projectile)
+                
+        # Update all particles
+        for particle in self.particles[:]:  # Create a copy of the list to safely remove items
+            particle.update()
+            if particle.is_dead():
+                print(f"Removing dead particle at ({particle.x}, {particle.y})")
+                self.particles.remove(particle)  # Remove from the original list
+                
+        # Handle detonation timing
+        if self.detonation_delay > 0:
+            self.detonation_delay -= 1
+            return
+            
+        if self.current_detonation_index >= len(self.detonation_sequence):
+            # Detonation sequence complete
+            self.detonation_sequence = []
+            return
+            
+        # Fire current piece
+        piece = self.detonation_sequence[self.current_detonation_index]
+        center_x = piece.x + CELL_SIZE // 2
+        center_y = piece.y + CELL_SIZE // 2
+        
+        # Create projectiles only in the piece's firing directions
+        for direction in piece.directions:
+            projectile = Projectile(self, center_x, center_y, direction)
+            self.projectiles.append(projectile)
+            
+        # Move to next piece in sequence
+        self.current_detonation_index += 1
+        self.detonation_delay = 15  # Wait 15 frames before next detonation
+        
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()
         
@@ -348,11 +415,7 @@ class Game:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
                     if self.detonate_button.collidepoint(event.pos):
-                        if self.selected_piece:
-                            print("Detonating from selected piece")
-                            # TODO: Implement detonation from selected piece
-                        else:
-                            print("No piece selected for detonation")
+                        self.start_detonation()  # Start detonation when button is clicked
                     elif self.undo_button.collidepoint(event.pos):
                         if self.undo_last_move():
                             print("Undo successful")
@@ -379,6 +442,8 @@ class Game:
                                 self.initial_drag_y = piece.y
                                 self.was_dragged = False  # Reset drag state
                                 break
+                elif event.button == 3:  # Right click for detonate
+                    self.start_detonation()
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1 and self.dragged_piece:
                     print(f"Mouse up on piece at ({self.dragged_piece.x}, {self.dragged_piece.y})")  # Debug print
@@ -450,6 +515,14 @@ class Game:
         
     def update(self):
         self.handle_events()
+        self.update_detonation()
+        
+        # Update and remove dead particles
+        for particle in self.particles[:]:
+            particle.update()
+            if particle.is_dead():
+                print(f"Removing dead particle at ({particle.x}, {particle.y})")
+                self.particles.remove(particle)
     
     def draw(self):
         self.screen.fill(WHITE)
@@ -468,6 +541,13 @@ class Game:
         # Draw monoliths
         for monolith in self.monoliths:
             monolith.draw(self.screen)
+        
+        # Draw projectiles and particles
+        for projectile in self.projectiles:
+            projectile.draw(self.screen)
+            
+        for particle in self.particles:
+            particle.draw(self.screen)
         
         # Update and draw detonation zones for moving piece
         if self.dragged_piece:

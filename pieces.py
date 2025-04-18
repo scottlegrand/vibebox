@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 from config import *
 
 class ArtilleryPiece:
@@ -222,4 +223,134 @@ class Monolith:
                 (base_x + self.wall_thickness, crack_y),
                 (base_x + self.width - self.wall_thickness, crack_y),
                 2
-            ) 
+            )
+
+class Projectile:
+    def __init__(self, game, start_x, start_y, direction):
+        self.game = game
+        self.x = start_x
+        self.y = start_y
+        self.direction = direction
+        self.speed = CELL_SIZE // 4  # Speed in pixels per frame
+        self.radius = CELL_SIZE // 8
+        self.color = (255, 200, 0)  # Bright yellow
+        self.trail_length = 3  # Number of trail segments
+        self.trail = []  # Store previous positions for trail effect
+        
+        # Arc trajectory parameters
+        self.arc_height = CELL_SIZE // 2  # Maximum height of arc
+        self.progress = 0  # Progress along trajectory (0 to 1)
+        self.start_pos = (start_x, start_y)
+        # Calculate target position (center of the target cell)
+        self.target_pos = (
+            start_x + direction[0] * CELL_SIZE,
+            start_y + direction[1] * CELL_SIZE
+        )
+        
+    def update(self):
+        # Add current position to trail
+        self.trail.append((self.x, self.y))
+        if len(self.trail) > self.trail_length:
+            self.trail.pop(0)
+            
+        # Update progress along arc
+        self.progress += 0.1  # Faster progress
+        if self.progress >= 1:
+            self.progress = 1
+            self.x = self.target_pos[0]  # Ensure we end exactly at target
+            self.y = self.target_pos[1]
+            return
+            
+        # Calculate position along arc
+        t = self.progress
+        # Quadratic bezier curve for arc
+        control_point = (
+            (self.start_pos[0] + self.target_pos[0]) / 2,
+            min(self.start_pos[1], self.target_pos[1]) - self.arc_height
+        )
+        
+        # Calculate new position
+        new_x = (1-t)**2 * self.start_pos[0] + 2*(1-t)*t * control_point[0] + t**2 * self.target_pos[0]
+        new_y = (1-t)**2 * self.start_pos[1] + 2*(1-t)*t * control_point[1] + t**2 * self.target_pos[1]
+        
+        # Update position
+        self.x = new_x
+        self.y = new_y
+        
+    def draw(self, surface):
+        # Draw trail
+        for i, (trail_x, trail_y) in enumerate(self.trail):
+            alpha = int(255 * (i + 1) / (len(self.trail) + 1))
+            trail_surface = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(trail_surface, (*self.color, alpha), 
+                             (self.radius, self.radius), self.radius)
+            surface.blit(trail_surface, (trail_x - self.radius, trail_y - self.radius))
+            
+        # Draw projectile
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
+        
+    def is_off_screen(self):
+        return self.progress >= 1
+
+class Particle:
+    def __init__(self, game, x, y, color):
+        self.game = game
+        self.x = x
+        self.y = y
+        self.color = color
+        self.radius = CELL_SIZE // 8
+        self.max_radius = self.radius * 3  # Increased max size
+        self.growth_rate = 0.3  # Slower growth
+        self.fade_rate = 8  # Slower fade
+        self.alpha = 255
+        self.lifetime = 40  # Longer lifetime
+        
+        # Add some randomness to the explosion
+        self.angle = random.uniform(0, 2 * math.pi)
+        self.speed = random.uniform(1, 3)  # Slower movement
+        self.distance = 0
+        self.max_distance = random.uniform(CELL_SIZE // 3, CELL_SIZE // 2)
+        print(f"New particle created at ({x}, {y}) with lifetime {self.lifetime}")
+        
+    def update(self):
+        # Always update particle properties
+        self.radius += self.growth_rate
+        self.alpha = max(0, self.alpha - self.fade_rate)
+        self.lifetime -= 1
+        
+        # Move particle outward from center if not at max distance
+        if self.distance < self.max_distance:
+            move_x = math.cos(self.angle) * self.speed
+            move_y = math.sin(self.angle) * self.speed
+            self.x += move_x
+            self.y += move_y
+            self.distance += self.speed
+            
+        print(f"Particle at ({self.x}, {self.y}) - alpha: {self.alpha}, lifetime: {self.lifetime}")
+        
+    def draw(self, surface):
+        if self.alpha <= 0:
+            return
+            
+        # Create surface for particle with alpha
+        particle_surface = pygame.Surface((self.max_radius * 2, self.max_radius * 2), pygame.SRCALPHA)
+        
+        # Draw outer glow
+        pygame.draw.circle(particle_surface, (*self.color, self.alpha // 2),
+                         (self.max_radius, self.max_radius), self.radius)
+        
+        # Draw inner core
+        pygame.draw.circle(particle_surface, (*self.color, self.alpha),
+                         (self.max_radius, self.max_radius), self.radius // 2)
+        
+        # Blit to main surface
+        surface.blit(particle_surface, 
+                    (self.x - self.max_radius, self.y - self.max_radius))
+        print(f"Drawing particle at ({self.x}, {self.y}) with alpha {self.alpha}")
+        
+    def is_dead(self):
+        # Particle is dead when either its lifetime is up or it's fully faded out
+        is_dead = self.lifetime <= 0 or self.alpha <= 0
+        if is_dead:
+            print(f"Particle at ({self.x}, {self.y}) is dead - lifetime: {self.lifetime}, alpha: {self.alpha}")
+        return is_dead 
