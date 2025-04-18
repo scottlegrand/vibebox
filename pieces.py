@@ -3,11 +3,23 @@ import math
 from config import *
 
 class ArtilleryPiece:
-    def __init__(self, scene, x, y, piece_type):
-        self.scene = scene
+    def __init__(self, game, x, y, piece_type):
+        self.game = game
         self.x = x
         self.y = y
-        self.type = piece_type
+        self.piece_type = piece_type
+        
+        # Define firing directions based on piece type
+        if piece_type == HORIZONTAL:
+            # Cardinal directions (up, right, down, left)
+            self.directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+        elif piece_type == DIAGONAL:
+            # Diagonal directions (up-right, down-right, down-left, up-left)
+            self.directions = [(1, -1), (1, 1), (-1, 1), (-1, -1)]
+        else:
+            # Default to horizontal if unknown type
+            self.directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+        
         self.base_color = GREEN if piece_type == HORIZONTAL else RED
         self.highlight_color = tuple(min(c + 50, 255) for c in self.base_color)
         self.shadow_color = tuple(max(c - 50, 0) for c in self.base_color)
@@ -49,21 +61,8 @@ class ArtilleryPiece:
         barrel_color = (200, 200, 200)  # Silver color
         barrel_interior = (50, 50, 50)  # Dark interior
         
-        if self.type == HORIZONTAL:
-            # Cardinal directions (plus sign)
-            directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-        else:
-            # Diagonal directions (square) - normalized to same distance as cardinal
-            diagonal_factor = 0.7071  # 1/sqrt(2) to maintain same distance
-            directions = [
-                (diagonal_factor, diagonal_factor),
-                (-diagonal_factor, diagonal_factor),
-                (diagonal_factor, -diagonal_factor),
-                (-diagonal_factor, -diagonal_factor)
-            ]
-            
-        for dx, dy in directions:
-            # Calculate barrel center position
+        for dx, dy in self.directions:
+            # Calculate barrel position
             barrel_x = center_x + dx * self.barrel_offset
             barrel_y = center_y + dy * self.barrel_offset
             

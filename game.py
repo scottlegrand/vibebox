@@ -18,10 +18,12 @@ class Game:
         self.monoliths = []
         self.dragged_piece = None
         self.drag_offset = (0, 0)
-        self.undo_stack = []  # Track piece positions for undo
+        self.move_history = []  # Track all moves for undo functionality
+        self.detonation_brightness = {}  # Track brightness of each tile
         
         # Add test pieces
         self.add_test_pieces()
+        self.update_detonation_zones()  # Initialize detonation zones
         
         # UI elements
         self.detonate_button = pygame.Rect(
@@ -81,36 +83,51 @@ class Game:
         ))
         
     def is_valid_placement(self, x, y):
-        # Check if position is within board bounds
-        if not (BOARD_X <= x < BOARD_X + BOARD_SIZE * CELL_SIZE and
-                BOARD_Y <= y < BOARD_Y + BOARD_SIZE * CELL_SIZE):
+        # Convert from top-left to center coordinates
+        center_x = x + CELL_SIZE // 2
+        center_y = y + CELL_SIZE // 2
+        
+        # Check if center is within board bounds
+        if not (BOARD_X <= center_x < BOARD_X + BOARD_SIZE * CELL_SIZE and
+                BOARD_Y <= center_y < BOARD_Y + BOARD_SIZE * CELL_SIZE):
             return False
             
         # Check if position overlaps with targets or monoliths
         for target in self.targets:
-            if (target.x <= x < target.x + CELL_SIZE and
-                target.y <= y < target.y + CELL_SIZE):
+            target_center_x = target.x + CELL_SIZE // 2
+            target_center_y = target.y + CELL_SIZE // 2
+            if abs(center_x - target_center_x) < CELL_SIZE and abs(center_y - target_center_y) < CELL_SIZE:
                 return False
                 
         for monolith in self.monoliths:
-            if (monolith.x <= x < monolith.x + CELL_SIZE and
-                monolith.y <= y < monolith.y + CELL_SIZE):
+            monolith_center_x = monolith.x + CELL_SIZE // 2
+            monolith_center_y = monolith.y + CELL_SIZE // 2
+            if abs(center_x - monolith_center_x) < CELL_SIZE and abs(center_y - monolith_center_y) < CELL_SIZE:
                 return False
                 
         # Check if position overlaps with other pieces
         for piece in self.pieces:
-            if piece != self.dragged_piece and (
-                piece.x <= x < piece.x + CELL_SIZE and
-                piece.y <= y < piece.y + CELL_SIZE
-            ):
-                return False
+            if piece != self.dragged_piece:
+                piece_center_x = piece.x + CELL_SIZE // 2
+                piece_center_y = piece.y + CELL_SIZE // 2
+                if abs(center_x - piece_center_x) < CELL_SIZE and abs(center_y - piece_center_y) < CELL_SIZE:
+                    return False
                 
         return True
         
     def snap_to_grid(self, x, y):
-        # Snap to nearest grid cell
-        grid_x = (x - BOARD_X) // CELL_SIZE * CELL_SIZE + BOARD_X
-        grid_y = (y - BOARD_Y) // CELL_SIZE * CELL_SIZE + BOARD_Y
+        # Convert from top-left to center coordinates
+        center_x = x + CELL_SIZE // 2
+        center_y = y + CELL_SIZE // 2
+        
+        # Snap center to nearest grid cell center
+        grid_center_x = ((center_x - BOARD_X) // CELL_SIZE) * CELL_SIZE + BOARD_X + CELL_SIZE // 2
+        grid_center_y = ((center_y - BOARD_Y) // CELL_SIZE) * CELL_SIZE + BOARD_Y + CELL_SIZE // 2
+        
+        # Convert back to top-left coordinates
+        grid_x = grid_center_x - CELL_SIZE // 2
+        grid_y = grid_center_y - CELL_SIZE // 2
+        
         return grid_x, grid_y
         
     def draw_header(self):
@@ -136,22 +153,38 @@ class Game:
             BOARD_SIZE * CELL_SIZE,
             BOARD_SIZE * CELL_SIZE
         )
-        pygame.draw.rect(self.screen, WHITE, board_rect)
-        pygame.draw.rect(self.screen, BLACK, board_rect, 2)
+        pygame.draw.rect(self.screen, BLACK, board_rect)
+        
+        # Draw detonation zones with cumulative brightness
+        for (grid_x, grid_y), brightness in self.detonation_brightness.items():
+            # Calculate tile position
+            x = BOARD_X + grid_x * CELL_SIZE
+            y = BOARD_Y + grid_y * CELL_SIZE
+            
+            # Create a surface for the brightening effect
+            bright_surface = pygame.Surface((CELL_SIZE, CELL_SIZE), pygame.SRCALPHA)
+            
+            # Calculate brightness based on number of overlapping zones
+            # Max brightness is 255 (white) when 3 or more zones overlap
+            alpha = min(255, brightness * 85)  # 85 = 255/3
+            
+            # Fill with white at calculated alpha
+            bright_surface.fill((255, 255, 255, alpha))
+            self.screen.blit(bright_surface, (x, y))
         
         # Draw grid lines
         for i in range(BOARD_SIZE + 1):
             # Vertical lines
             pygame.draw.line(
                 self.screen,
-                BLACK,
+                WHITE,
                 (BOARD_X + i * CELL_SIZE, BOARD_Y),
                 (BOARD_X + i * CELL_SIZE, BOARD_Y + BOARD_SIZE * CELL_SIZE)
             )
             # Horizontal lines
             pygame.draw.line(
                 self.screen,
-                BLACK,
+                WHITE,
                 (BOARD_X, BOARD_Y + i * CELL_SIZE),
                 (BOARD_X + BOARD_SIZE * CELL_SIZE, BOARD_Y + i * CELL_SIZE)
             )
@@ -226,6 +259,50 @@ class Game:
         score_text = self.font.render(f"Score: {self.score}", True, BLACK)
         self.screen.blit(score_text, (SCORE_X, SCORE_Y))
     
+    def save_move(self, piece, old_x, old_y, new_x, new_y):
+        """Save a move to the history for undo functionality"""
+        self.move_history.append({
+            'piece': piece,
+            'old_x': old_x,
+            'old_y': old_y,
+            'new_x': new_x,
+            'new_y': new_y
+        })
+        
+    def undo_last_move(self):
+        """Undo the last move in the history"""
+        if self.move_history:
+            move = self.move_history.pop()
+            move['piece'].x = move['old_x']
+            move['piece'].y = move['old_y']
+            return True
+        return False
+        
+    def update_detonation_zones(self):
+        """Update the brightness of tiles based on all pieces' detonation zones"""
+        # Reset brightness
+        self.detonation_brightness = {}
+        
+        # Calculate brightness for each piece
+        for piece in self.pieces:
+            # Only process pieces on the board (not in tray)
+            if piece.y < TRAY_Y:
+                # Convert piece position to grid coordinates
+                piece_grid_x = (piece.x - BOARD_X) // CELL_SIZE
+                piece_grid_y = (piece.y - BOARD_Y) // CELL_SIZE
+                    
+                # Get detonation zone for this piece
+                for dx, dy in piece.directions:
+                    # Calculate adjacent grid position
+                    grid_x = piece_grid_x + dx
+                    grid_y = piece_grid_y + dy
+                    
+                    # Check if within board bounds
+                    if 0 <= grid_x < BOARD_SIZE and 0 <= grid_y < BOARD_SIZE:
+                        key = (grid_x, grid_y)
+                        # Increment brightness for this tile
+                        self.detonation_brightness[key] = self.detonation_brightness.get(key, 0) + 1
+
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()
         
@@ -242,77 +319,87 @@ class Game:
                     if self.detonate_button.collidepoint(event.pos):
                         print("Detonate button clicked")
                     elif self.undo_button.collidepoint(event.pos):
-                        print("Undo button clicked")
+                        if self.undo_last_move():
+                            print("Undo successful")
+                            self.update_detonation_zones()  # Update zones after undo
+                        else:
+                            print("No moves to undo")
                     else:
                         # Check if clicking on a piece
                         for piece in self.pieces:
-                            # Calculate the center of the piece's dome
-                            dome_center_x = piece.x + CELL_SIZE // 2
-                            dome_center_y = piece.y + CELL_SIZE // 2
-                            
-                            # Check if click is within the piece's bounds
-                            if (piece.x <= event.pos[0] < piece.x + CELL_SIZE and
-                                piece.y <= event.pos[1] < piece.y + CELL_SIZE):
-                                # Calculate offset from dome center to mouse
-                                self.drag_offset = (
-                                    event.pos[0] - dome_center_x,
-                                    event.pos[1] - dome_center_y
-                                )
+                            piece_center_x = piece.x + CELL_SIZE // 2
+                            piece_center_y = piece.y + CELL_SIZE // 2
+                            # Check if click is within piece's radius
+                            if ((event.pos[0] - piece_center_x) ** 2 + 
+                                (event.pos[1] - piece_center_y) ** 2 <= 
+                                (CELL_SIZE // 2) ** 2):
                                 self.dragged_piece = piece
-                                # Save current position for undo
-                                self.undo_stack.append((piece, piece.x, piece.y))
+                                self.drag_offset = (
+                                    event.pos[0] - piece_center_x,
+                                    event.pos[1] - piece_center_y
+                                )
+                                # Store initial position for potential move
+                                self.initial_drag_x = piece.x
+                                self.initial_drag_y = piece.y
                                 break
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1 and self.dragged_piece:
-                    # Calculate the dome's center position
-                    dome_center_x = event.pos[0] - self.drag_offset[0]
-                    dome_center_y = event.pos[1] - self.drag_offset[1]
-                    
-                    # Convert dome center to piece's top-left position
-                    piece_x = dome_center_x - CELL_SIZE // 2
-                    piece_y = dome_center_y - CELL_SIZE // 2
-                    
-                    # Snap to grid if on board
-                    if (BOARD_X <= piece_x < BOARD_X + BOARD_SIZE * CELL_SIZE and
-                        BOARD_Y <= piece_y < BOARD_Y + BOARD_SIZE * CELL_SIZE):
-                        # Calculate the grid cell center
-                        grid_cell_x = ((dome_center_x - BOARD_X) // CELL_SIZE) * CELL_SIZE + BOARD_X + CELL_SIZE // 2
-                        grid_cell_y = ((dome_center_y - BOARD_Y) // CELL_SIZE) * CELL_SIZE + BOARD_Y + CELL_SIZE // 2
+                    # Only save move if piece actually moved to a new position
+                    if (self.dragged_piece.x != self.initial_drag_x or 
+                        self.dragged_piece.y != self.initial_drag_y):
                         
-                        # Convert grid cell center to piece position
-                        piece_x = grid_cell_x - CELL_SIZE // 2
-                        piece_y = grid_cell_y - CELL_SIZE // 2
-                        
-                        if self.is_valid_placement(piece_x, piece_y):
-                            self.dragged_piece.x = piece_x
-                            self.dragged_piece.y = piece_y
+                        # Check if dropped in tray area
+                        if TRAY_Y <= event.pos[1] < TRAY_Y + TRAY_HEIGHT:
+                            # Return piece to tray
+                            new_x = BOARD_X + (len(self.pieces) % BOARD_SIZE) * CELL_SIZE
+                            new_y = TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2
+                            self.dragged_piece.x = new_x
+                            self.dragged_piece.y = new_y
+                            self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, new_x, new_y)
                         else:
-                            # Return to original position if invalid
-                            self.dragged_piece.x = self.undo_stack[-1][1]
-                            self.dragged_piece.y = self.undo_stack[-1][2]
-                            self.undo_stack.pop()
+                            # Calculate piece center based on mouse position and offset
+                            piece_center_x = event.pos[0] - self.drag_offset[0]
+                            piece_center_y = event.pos[1] - self.drag_offset[1]
+                            
+                            # Convert center to top-left for snapping
+                            piece_x = piece_center_x - CELL_SIZE // 2
+                            piece_y = piece_center_y - CELL_SIZE // 2
+                            
+                            # Snap to grid
+                            grid_x, grid_y = self.snap_to_grid(piece_x, piece_y)
+                            
+                            if self.is_valid_placement(grid_x, grid_y):
+                                self.dragged_piece.x = grid_x
+                                self.dragged_piece.y = grid_y
+                                self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, grid_x, grid_y)
+                            else:
+                                # Return to original position if invalid
+                                self.dragged_piece.x = self.initial_drag_x
+                                self.dragged_piece.y = self.initial_drag_y
                     else:
-                        # Return to original position if not on board
-                        self.dragged_piece.x = self.undo_stack[-1][1]
-                        self.dragged_piece.y = self.undo_stack[-1][2]
-                        self.undo_stack.pop()
+                        # If piece wasn't moved, just return it to initial position
+                        self.dragged_piece.x = self.initial_drag_x
+                        self.dragged_piece.y = self.initial_drag_y
+                            
                     self.dragged_piece = None
+                    self.update_detonation_zones()  # Update zones after piece placement
             elif event.type == pygame.MOUSEMOTION:
                 if self.dragged_piece:
-                    # Calculate the dome's center position
-                    dome_center_x = event.pos[0] - self.drag_offset[0]
-                    dome_center_y = event.pos[1] - self.drag_offset[1]
+                    # Update piece center position while dragging
+                    piece_center_x = event.pos[0] - self.drag_offset[0]
+                    piece_center_y = event.pos[1] - self.drag_offset[1]
                     
-                    # Convert dome center to piece's top-left position
-                    self.dragged_piece.x = dome_center_x - CELL_SIZE // 2
-                    self.dragged_piece.y = dome_center_y - CELL_SIZE // 2
-    
+                    # Convert center to top-left for drawing
+                    self.dragged_piece.x = piece_center_x - CELL_SIZE // 2
+                    self.dragged_piece.y = piece_center_y - CELL_SIZE // 2
+                    self.update_detonation_zones()  # Update zones while dragging
+        
     def update(self):
         self.handle_events()
     
     def draw(self):
         self.screen.fill(WHITE)
-        self.draw_header()  # Draw header first
+        self.draw_header()
         self.draw_board()
         self.draw_tray()
         pygame.display.flip()
