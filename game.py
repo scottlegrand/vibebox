@@ -17,9 +17,11 @@ class Game:
         self.targets = []
         self.monoliths = []
         self.dragged_piece = None
+        self.selected_piece = None  # Track selected piece for detonation
         self.drag_offset = (0, 0)
         self.move_history = []  # Track all moves for undo functionality
         self.detonation_brightness = {}  # Track brightness of each tile
+        self.was_dragged = False  # Track if piece was actually moved
         
         # Add test pieces
         self.add_test_pieces()
@@ -189,6 +191,30 @@ class Game:
                 (BOARD_X + BOARD_SIZE * CELL_SIZE, BOARD_Y + i * CELL_SIZE)
             )
         
+        # Draw glowing border for selected piece
+        if self.selected_piece and self.selected_piece.y < TRAY_Y:
+            # Calculate cell position
+            cell_x = ((self.selected_piece.x + CELL_SIZE // 2) - BOARD_X) // CELL_SIZE
+            cell_y = ((self.selected_piece.y + CELL_SIZE // 2) - BOARD_Y) // CELL_SIZE
+            
+            # Draw outer glow
+            glow_rect = pygame.Rect(
+                BOARD_X + cell_x * CELL_SIZE - 2,
+                BOARD_Y + cell_y * CELL_SIZE - 2,
+                CELL_SIZE + 4,
+                CELL_SIZE + 4
+            )
+            pygame.draw.rect(self.screen, (255, 255, 255, 200), glow_rect, 4)
+            
+            # Draw inner glow
+            glow_rect = pygame.Rect(
+                BOARD_X + cell_x * CELL_SIZE - 1,
+                BOARD_Y + cell_y * CELL_SIZE - 1,
+                CELL_SIZE + 2,
+                CELL_SIZE + 2
+            )
+            pygame.draw.rect(self.screen, (255, 255, 255, 100), glow_rect, 2)
+        
         # Draw pieces
         for piece in self.pieces:
             piece.draw(self.screen)
@@ -319,7 +345,11 @@ class Game:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
                     if self.detonate_button.collidepoint(event.pos):
-                        print("Detonate button clicked")
+                        if self.selected_piece:
+                            print("Detonating from selected piece")
+                            # TODO: Implement detonation from selected piece
+                        else:
+                            print("No piece selected for detonation")
                     elif self.undo_button.collidepoint(event.pos):
                         if self.undo_last_move():
                             print("Undo successful")
@@ -335,6 +365,7 @@ class Game:
                             if ((event.pos[0] - piece_center_x) ** 2 + 
                                 (event.pos[1] - piece_center_y) ** 2 <= 
                                 (CELL_SIZE // 2) ** 2):
+                                print(f"Mouse down on piece at ({piece.x}, {piece.y})")  # Debug print
                                 self.dragged_piece = piece
                                 self.drag_offset = (
                                     event.pos[0] - piece_center_x,
@@ -343,46 +374,52 @@ class Game:
                                 # Store initial position for potential move
                                 self.initial_drag_x = piece.x
                                 self.initial_drag_y = piece.y
+                                self.was_dragged = False  # Reset drag state
                                 break
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1 and self.dragged_piece:
-                    # Only save move if piece actually moved to a new position
-                    if (self.dragged_piece.x != self.initial_drag_x or 
-                        self.dragged_piece.y != self.initial_drag_y):
-                        
-                        # Check if dropped in tray area
-                        if TRAY_Y <= event.pos[1] < TRAY_Y + TRAY_HEIGHT:
-                            # Return piece to tray
-                            new_x = BOARD_X + (len(self.pieces) % BOARD_SIZE) * CELL_SIZE
-                            new_y = TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2
-                            self.dragged_piece.x = new_x
-                            self.dragged_piece.y = new_y
-                            self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, new_x, new_y)
-                        else:
-                            # Calculate piece center based on mouse position and offset
-                            piece_center_x = event.pos[0] - self.drag_offset[0]
-                            piece_center_y = event.pos[1] - self.drag_offset[1]
+                    print(f"Mouse up on piece at ({self.dragged_piece.x}, {self.dragged_piece.y})")  # Debug print
+                    if self.was_dragged:
+                        print("Piece was dragged")  # Debug print
+                        # Handle drag operation
+                        if (self.dragged_piece.x != self.initial_drag_x or 
+                            self.dragged_piece.y != self.initial_drag_y):
                             
-                            # Convert center to top-left for snapping
-                            piece_x = piece_center_x - CELL_SIZE // 2
-                            piece_y = piece_center_y - CELL_SIZE // 2
-                            
-                            # Snap to grid
-                            grid_x, grid_y = self.snap_to_grid(piece_x, piece_y)
-                            
-                            if self.is_valid_placement(grid_x, grid_y):
-                                self.dragged_piece.x = grid_x
-                                self.dragged_piece.y = grid_y
-                                self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, grid_x, grid_y)
+                            # Check if dropped in tray area
+                            if TRAY_Y <= event.pos[1] < TRAY_Y + TRAY_HEIGHT:
+                                # Return piece to tray
+                                new_x = BOARD_X + (len(self.pieces) % BOARD_SIZE) * CELL_SIZE
+                                new_y = TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2
+                                self.dragged_piece.x = new_x
+                                self.dragged_piece.y = new_y
+                                if self.selected_piece == self.dragged_piece:
+                                    self.selected_piece = None
+                                self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, new_x, new_y)
                             else:
-                                # Return to original position if invalid
-                                self.dragged_piece.x = self.initial_drag_x
-                                self.dragged_piece.y = self.initial_drag_y
+                                # Calculate piece center based on mouse position and offset
+                                piece_center_x = event.pos[0] - self.drag_offset[0]
+                                piece_center_y = event.pos[1] - self.drag_offset[1]
+                                
+                                # Convert center to top-left for snapping
+                                piece_x = piece_center_x - CELL_SIZE // 2
+                                piece_y = piece_center_y - CELL_SIZE // 2
+                                
+                                # Snap to grid
+                                grid_x, grid_y = self.snap_to_grid(piece_x, piece_y)
+                                
+                                if self.is_valid_placement(grid_x, grid_y):
+                                    self.dragged_piece.x = grid_x
+                                    self.dragged_piece.y = grid_y
+                                    self.save_move(self.dragged_piece, self.initial_drag_x, self.initial_drag_y, grid_x, grid_y)
+                                else:
+                                    # Return to original position if invalid
+                                    self.dragged_piece.x = self.initial_drag_x
+                                    self.dragged_piece.y = self.initial_drag_y
                     else:
-                        # If piece wasn't moved, just return it to initial position
-                        self.dragged_piece.x = self.initial_drag_x
-                        self.dragged_piece.y = self.initial_drag_y
-                            
+                        print("Piece was clicked (not dragged)")  # Debug print
+                        # Handle selection
+                        self.selected_piece = self.dragged_piece
+                    
                     self.dragged_piece = None
                     self.update_detonation_zones()  # Update zones after piece placement
             elif event.type == pygame.MOUSEMOTION:
@@ -394,6 +431,7 @@ class Game:
                     # Convert center to top-left for drawing
                     self.dragged_piece.x = piece_center_x - CELL_SIZE // 2
                     self.dragged_piece.y = piece_center_y - CELL_SIZE // 2
+                    self.was_dragged = True  # Mark that the piece was actually moved
                     self.update_detonation_zones()  # Update zones while dragging
         
     def update(self):
