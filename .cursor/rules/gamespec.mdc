@@ -15,7 +15,7 @@ Config.BOARD_SIZE is 8
 - Board positioned at `(boardX, boardY)` with UI margin
 
 ## Game Pieces
-- Two types of artillery pieces:
+- Three types of artillery pieces:
   - Horizontal pieces (green): Fire in four cardinal directions (up, down, left, right)
   - Diagonal pieces (red): Fire in four diagonal directions
     - Each artillery piece has:
@@ -23,10 +23,11 @@ Config.BOARD_SIZE is 8
     - Barrels showing the 4 firing directions all emanating from a central turret on top of the base
     - Barrels resemble a top view of a gun barrel and are colored a dull metallic gray
     - Detonation indicators showing impact zones
+  - 8 directional pieces (blue) that fire in both cardinal and diagonal directions
+    - At most one of these per level and not utilized until level 10 
 - Monoliths:
   - Placed on board during level initialization in tiles that are not detonation zones for the solution to the level
-  - Level is lost if a monolith is blown up
-  - Monoliths should look like ruined ancient buildings and there should be several random variants of them
+  - Look like piles of boulders that are the ruins of some sort of statue or building
 - Targets
   - 3 concentric red and white rings like an archery target as seen from above
 

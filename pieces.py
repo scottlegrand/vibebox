@@ -11,116 +11,73 @@ class ArtilleryPiece:
         self.base_color = GREEN if piece_type == HORIZONTAL else RED
         self.highlight_color = tuple(min(c + 50, 255) for c in self.base_color)
         self.shadow_color = tuple(max(c - 50, 0) for c in self.base_color)
-        self.radius = CELL_SIZE // 3
-        self.barrel_length = CELL_SIZE // 3
-        self.barrel_width = CELL_SIZE // 8
-        self.turret_radius = self.radius * 2 // 3
-        self.turret_height = self.radius // 4
+        self.radius = CELL_SIZE // 3  # Main piece radius
+        self.turret_radius = CELL_SIZE // 6  # Central turret radius
+        self.barrel_radius = CELL_SIZE // 12  # Smaller barrel radius
+        self.barrel_offset = CELL_SIZE // 5  # Distance from center to barrel centers
         
     def draw(self, surface):
         center_x = self.x + CELL_SIZE // 2
         center_y = self.y + CELL_SIZE // 2
         
-        # Draw base shadow
+        # Draw main base shadow
         pygame.draw.circle(surface, self.shadow_color, 
                          (center_x + 2, center_y + 2), self.radius)
         
-        # Draw base
+        # Draw main base
         pygame.draw.circle(surface, self.base_color, 
                          (center_x, center_y), self.radius)
         
-        # Draw base highlight
+        # Draw main base highlight
         highlight_radius = self.radius * 3 // 4
         pygame.draw.circle(surface, self.highlight_color, 
                          (center_x - 2, center_y - 2), highlight_radius)
         
-        # Draw turret shadow (elliptical due to perspective)
-        turret_center_y = center_y - self.radius // 3
-        pygame.draw.ellipse(surface, self.shadow_color,
-                          (center_x - self.turret_radius + 2,
-                           turret_center_y - self.turret_height // 2 + 2,
-                           self.turret_radius * 2,
-                           self.turret_height))
+        # Draw central turret shadow
+        pygame.draw.circle(surface, self.shadow_color,
+                         (center_x + 1, center_y + 1), self.turret_radius)
         
-        # Draw turret (elliptical due to perspective)
-        pygame.draw.ellipse(surface, self.base_color,
-                          (center_x - self.turret_radius,
-                           turret_center_y - self.turret_height // 2,
-                           self.turret_radius * 2,
-                           self.turret_height))
+        # Draw central turret
+        pygame.draw.circle(surface, self.base_color,
+                         (center_x, center_y), self.turret_radius)
         
         # Draw turret highlight
-        highlight_rect = pygame.Rect(
-            center_x - self.turret_radius + 2,
-            turret_center_y - self.turret_height // 2 + 2,
-            self.turret_radius * 2 - 4,
-            self.turret_height // 2
-        )
-        pygame.draw.ellipse(surface, self.highlight_color, highlight_rect)
+        pygame.draw.circle(surface, self.highlight_color,
+                         (center_x - 1, center_y - 1), self.turret_radius // 2)
         
         # Draw barrels
-        barrel_color = (150, 150, 150)  # Base metallic gray
-        barrel_highlight = (180, 180, 180)  # Lighter metallic gray
-        barrel_shadow = (120, 120, 120)  # Darker metallic gray
+        barrel_color = (200, 200, 200)  # Silver color
+        barrel_interior = (50, 50, 50)  # Dark interior
         
         if self.type == HORIZONTAL:
+            # Cardinal directions (plus sign)
             directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
         else:
-            directions = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
+            # Diagonal directions (square) - normalized to same distance as cardinal
+            diagonal_factor = 0.7071  # 1/sqrt(2) to maintain same distance
+            directions = [
+                (diagonal_factor, diagonal_factor),
+                (-diagonal_factor, diagonal_factor),
+                (diagonal_factor, -diagonal_factor),
+                (-diagonal_factor, -diagonal_factor)
+            ]
             
         for dx, dy in directions:
-            # Calculate barrel positions with more overhead view
-            horizontal_length = self.barrel_length * 0.7  # For left/right barrels
-            vertical_length = self.barrel_length * 0.7  # For up/down barrels
-            
-            start_x = center_x + dx * self.turret_radius
-            start_y = turret_center_y + dy * self.turret_height // 2
-            
-            # Calculate end points with proper perspective
-            if dy != 0:  # For up/down barrels
-                # Make up/down barrels point in different directions with longer length
-                end_x = center_x + dx * (self.turret_radius + horizontal_length * 0.5)  # Reduced horizontal component
-                if dy > 0:  # Down barrel
-                    end_y = start_y + vertical_length
-                else:  # Up barrel
-                    end_y = start_y - vertical_length
-            else:  # For left/right barrels
-                end_x = center_x + dx * (self.turret_radius + horizontal_length)
-                end_y = start_y
-            
-            # For diagonal pieces, adjust the end points
-            if self.type != HORIZONTAL:
-                if dx != 0 and dy != 0:  # Diagonal barrels
-                    end_x = center_x + dx * (self.turret_radius + horizontal_length)
-                    end_y = turret_center_y + dy * vertical_length
+            # Calculate barrel center position
+            barrel_x = center_x + dx * self.barrel_offset
+            barrel_y = center_y + dy * self.barrel_offset
             
             # Draw barrel shadow
-            pygame.draw.line(
-                surface,
-                barrel_shadow,
-                (start_x + 2, start_y + 2),
-                (end_x + 2, end_y + 2),
-                self.barrel_width
-            )
+            pygame.draw.circle(surface, (100, 100, 100),
+                             (barrel_x + 1, barrel_y + 1), self.barrel_radius)
             
             # Draw barrel
-            pygame.draw.line(
-                surface,
-                barrel_color,
-                (start_x, start_y),
-                (end_x, end_y),
-                self.barrel_width
-            )
+            pygame.draw.circle(surface, barrel_color,
+                             (barrel_x, barrel_y), self.barrel_radius)
             
-            # Draw barrel highlight
-            highlight_width = self.barrel_width // 2
-            pygame.draw.line(
-                surface,
-                barrel_highlight,
-                (start_x - 1, start_y - 1),
-                (end_x - 1, end_y - 1),
-                highlight_width
-            )
+            # Draw barrel interior
+            pygame.draw.circle(surface, barrel_interior,
+                             (barrel_x, barrel_y), self.barrel_radius // 2)
 
 class Target:
     def __init__(self, scene, x, y):
@@ -266,14 +223,4 @@ class Monolith:
                 (base_x + self.wall_thickness, crack_y),
                 (base_x + self.width - self.wall_thickness, crack_y),
                 2
-            )
-        
-        # Draw rubble at base
-        rubble_height = 5
-        rubble_rect = pygame.Rect(
-            base_x,
-            base_y + self.height - rubble_height,
-            self.width,
-            rubble_height
-        )
-        pygame.draw.rect(surface, (90, 90, 90), rubble_rect) 
+            ) 

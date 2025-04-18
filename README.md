@@ -14,7 +14,7 @@ A Python implementation of the Artillery Chain Reaction game using Pygame.
 
 To start the game, run:
 ```bash
-python src/game/game.py
+python game.py
 ```
 
 ## Game Controls
