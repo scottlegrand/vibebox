@@ -46,19 +46,19 @@ class Game:
         self.undo_hover = False
         
     def add_test_pieces(self):
-        # Add a horizontal artillery piece
+        # Add a horizontal artillery piece to the tray
         self.pieces.append(ArtilleryPiece(
             self,
-            BOARD_X + CELL_SIZE,
-            BOARD_Y + CELL_SIZE,
+            BOARD_X + CELL_SIZE,  # First position in tray
+            TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2,
             HORIZONTAL
         ))
         
-        # Add a diagonal artillery piece to the board
+        # Add a diagonal artillery piece to the tray
         self.pieces.append(ArtilleryPiece(
             self,
-            BOARD_X + 4 * CELL_SIZE,
-            BOARD_Y + 4 * CELL_SIZE,
+            BOARD_X + 2 * CELL_SIZE,  # Second position in tray
+            TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2,
             DIAGONAL
         ))
         
@@ -81,7 +81,18 @@ class Game:
         center_x = x + CELL_SIZE // 2
         center_y = y + CELL_SIZE // 2
         
-        # Check if center is within board bounds
+        # Check if position is in tray
+        if TRAY_Y <= center_y < TRAY_Y + TRAY_HEIGHT:
+            # For tray placement, only check for piece overlap
+            for piece in self.pieces:
+                if piece != self.dragged_piece:
+                    piece_center_x = piece.x + CELL_SIZE // 2
+                    piece_center_y = piece.y + CELL_SIZE // 2
+                    if abs(center_x - piece_center_x) < CELL_SIZE and abs(center_y - piece_center_y) < CELL_SIZE:
+                        return False
+            return True
+        
+        # For board placement, check bounds and all objects
         if not (BOARD_X <= center_x < BOARD_X + BOARD_SIZE * CELL_SIZE and
                 BOARD_Y <= center_y < BOARD_Y + BOARD_SIZE * CELL_SIZE):
             return False
@@ -379,9 +390,20 @@ class Game:
                             
                             # Check if dropped in tray area
                             if TRAY_Y <= event.pos[1] < TRAY_Y + TRAY_HEIGHT:
-                                # Return piece to tray
-                                new_x = BOARD_X + (len(self.pieces) % BOARD_SIZE) * CELL_SIZE
+                                # Find first available position in tray
+                                new_x = BOARD_X
                                 new_y = TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2
+                                while True:
+                                    # Check if this position is valid
+                                    if self.is_valid_placement(new_x, new_y):
+                                        break
+                                    new_x += CELL_SIZE
+                                    # If we've checked all positions, return to original position
+                                    if new_x >= BOARD_X + BOARD_SIZE * CELL_SIZE:
+                                        new_x = self.initial_drag_x
+                                        new_y = self.initial_drag_y
+                                        break
+                                
                                 self.dragged_piece.x = new_x
                                 self.dragged_piece.y = new_y
                                 if self.selected_piece == self.dragged_piece:
