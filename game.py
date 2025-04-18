@@ -287,9 +287,11 @@ class Game:
         for piece in self.pieces:
             # Only process pieces on the board (not in tray)
             if piece.y < TRAY_Y:
-                # Convert piece position to grid coordinates
-                piece_grid_x = (piece.x - BOARD_X) // CELL_SIZE
-                piece_grid_y = (piece.y - BOARD_Y) // CELL_SIZE
+                # Convert piece position to grid coordinates using center
+                piece_center_x = piece.x + CELL_SIZE // 2
+                piece_center_y = piece.y + CELL_SIZE // 2
+                piece_grid_x = (piece_center_x - BOARD_X) // CELL_SIZE
+                piece_grid_y = (piece_center_y - BOARD_Y) // CELL_SIZE
                     
                 # Get detonation zone for this piece
                 for dx, dy in piece.directions:
@@ -402,6 +404,43 @@ class Game:
         self.draw_header()
         self.draw_board()
         self.draw_tray()
+        
+        # Draw all pieces
+        for piece in self.pieces:
+            piece.draw(self.screen)
+        
+        # Draw targets
+        for target in self.targets:
+            target.draw(self.screen)
+        
+        # Draw monoliths
+        for monolith in self.monoliths:
+            monolith.draw(self.screen)
+        
+        # Update and draw detonation zones for moving piece
+        if self.dragged_piece:
+            # Use exact same logic as snap_to_grid
+            center_x = self.dragged_piece.x + CELL_SIZE // 2
+            center_y = self.dragged_piece.y + CELL_SIZE // 2
+            
+            # Get current cell
+            current_cell_x = (center_x - BOARD_X) // CELL_SIZE
+            current_cell_y = (center_y - BOARD_Y) // CELL_SIZE
+            
+            # Snap center to nearest grid cell center
+            grid_center_x = current_cell_x * CELL_SIZE + BOARD_X + CELL_SIZE // 2
+            grid_center_y = current_cell_y * CELL_SIZE + BOARD_Y + CELL_SIZE // 2
+            
+            # Convert back to top-left coordinates
+            snapped_x = grid_center_x - CELL_SIZE // 2
+            snapped_y = grid_center_y - CELL_SIZE // 2
+            
+            # Temporarily move piece to snapped position for zone drawing
+            original_x, original_y = self.dragged_piece.x, self.dragged_piece.y
+            self.dragged_piece.x, self.dragged_piece.y = snapped_x, snapped_y
+            self.update_detonation_zones()
+            self.dragged_piece.x, self.dragged_piece.y = original_x, original_y
+        
         pygame.display.flip()
     
     def run(self):
