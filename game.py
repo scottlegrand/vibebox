@@ -62,14 +62,6 @@ class Game:
             DIAGONAL
         ))
         
-        # Add a diagonal artillery piece to the tray
-        self.pieces.append(ArtilleryPiece(
-            self,
-            BOARD_X + 2 * CELL_SIZE,
-            TRAY_Y + (TRAY_HEIGHT - CELL_SIZE) // 2,
-            DIAGONAL
-        ))
-        
         # Add a target
         self.targets.append(Target(
             self,
