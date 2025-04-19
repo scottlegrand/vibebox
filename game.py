@@ -358,17 +358,22 @@ class Game:
         if not self.detonation_sequence:
             return
             
-        # Update all projectiles
+        # Update projectiles
         for projectile in self.projectiles[:]:
             projectile.update()
-            if projectile.is_off_screen():
-                # Create explosion at projectile's final position
-                print(f"Creating explosion at ({projectile.x}, {projectile.y})")
-                for _ in range(32):  # Increased from 8 to 16 particles per explosion
-                    particle = Particle(self, projectile.x, projectile.y, 
-                                     self.detonation_sequence[0].base_color)  # Always use first piece's color
-                    self.particles.append(particle)
+            print(f"Projectile at ({projectile.x}, {projectile.y}) with progress {projectile.progress}")
+            if projectile.progress >= 1.0:  # Only remove when progress reaches 1.0
+                print("Projectile reached target")
                 self.projectiles.remove(projectile)
+                # Create explosion particles at target
+                # Find the piece that launched this projectile
+                for piece in self.detonation_sequence:
+                    if (piece.x + CELL_SIZE // 2 == projectile.start_pos[0] and 
+                        piece.y + CELL_SIZE // 2 == projectile.start_pos[1]):
+                        # Create 40 particles (doubled from 20) with the piece's color
+                        for _ in range(40):
+                            self.particles.append(Particle(self, projectile.target_pos[0], projectile.target_pos[1], piece.base_color))
+                        break
                 
         # Update all particles
         for particle in self.particles[:]:  # Create a copy of the list to safely remove items
@@ -399,7 +404,7 @@ class Game:
             
         # Move to next piece in sequence
         self.current_detonation_index += 1
-        self.detonation_delay = 15  # Wait 15 frames before next detonation
+        self.detonation_delay = 50  # Increased from 15 to 50 frames to allow projectiles to complete trajectory
         
     def handle_events(self):
         mouse_pos = pygame.mouse.get_pos()

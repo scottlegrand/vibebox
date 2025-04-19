@@ -231,15 +231,16 @@ class Projectile:
         self.x = start_x
         self.y = start_y
         self.direction = direction
-        self.speed = CELL_SIZE // 4  # Speed in pixels per frame
+        self.speed = CELL_SIZE // 4  # Reset speed to original value
         self.radius = CELL_SIZE // 8
         self.color = (255, 200, 0)  # Bright yellow
-        self.trail_length = 3  # Number of trail segments
+        self.trail_length = 5  # Increased trail length
         self.trail = []  # Store previous positions for trail effect
         
         # Arc trajectory parameters
         self.arc_height = CELL_SIZE // 2  # Maximum height of arc
         self.progress = 0  # Progress along trajectory (0 to 1)
+        self.progress_increment = 0.02  # More steps (50 total)
         self.start_pos = (start_x, start_y)
         # Calculate target position (center of the target cell)
         self.target_pos = (
@@ -254,22 +255,28 @@ class Projectile:
             self.trail.pop(0)
             
         # Update progress along arc
-        self.progress += 0.1  # Faster progress
-        if self.progress >= 1:
-            self.progress = 1
-            self.x = self.target_pos[0]  # Ensure we end exactly at target
+        old_progress = self.progress
+        self.progress += self.progress_increment
+        print(f"Projectile progress: {self.progress} (increment: {self.progress_increment}, old: {old_progress})")  # Debug print
+        if self.progress >= 1.0:
+            self.progress = 1.0
+            self.x = self.target_pos[0]
             self.y = self.target_pos[1]
             return
             
         # Calculate position along arc
         t = self.progress
-        # Quadratic bezier curve for arc
+        # Calculate midpoint
+        mid_x = (self.start_pos[0] + self.target_pos[0]) / 2
+        mid_y = (self.start_pos[1] + self.target_pos[1]) / 2
+        
+        # Calculate control point (above midpoint)
         control_point = (
-            (self.start_pos[0] + self.target_pos[0]) / 2,
-            min(self.start_pos[1], self.target_pos[1]) - self.arc_height
+            mid_x,
+            mid_y - self.arc_height
         )
         
-        # Calculate new position
+        # Calculate new position using quadratic bezier
         new_x = (1-t)**2 * self.start_pos[0] + 2*(1-t)*t * control_point[0] + t**2 * self.target_pos[0]
         new_y = (1-t)**2 * self.start_pos[1] + 2*(1-t)*t * control_point[1] + t**2 * self.target_pos[1]
         
@@ -290,7 +297,7 @@ class Projectile:
         pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
         
     def is_off_screen(self):
-        return self.progress >= 1
+        return self.progress >= 1.0
 
 class Particle:
     def __init__(self, game, x, y, color):
@@ -298,7 +305,7 @@ class Particle:
         self.x = x
         self.y = y
         self.color = color
-        self.radius = CELL_SIZE // 8
+        self.radius = CELL_SIZE // 16  # Half the original size
         self.max_radius = self.radius * 3  # Increased max size
         self.growth_rate = 0.3  # Slower growth
         self.fade_rate = 8  # Slower fade
