@@ -300,7 +300,7 @@ class Projectile:
         return self.progress >= 1.0
 
 class Particle:
-    def __init__(self, game, x, y, color):
+    def __init__(self, game, x, y, color, is_ring=False, ring_radius=0):
         self.game = game
         self.x = x
         self.y = y
@@ -311,6 +311,12 @@ class Particle:
         self.fade_rate = 8  # Slower fade
         self.alpha = 255
         self.lifetime = 40  # Longer lifetime
+        
+        # Ring-specific properties
+        self.is_ring = is_ring
+        self.ring_radius = ring_radius
+        self.ring_speed = 2  # Speed at which the ring expands
+        self.ring_thickness = 8  # Doubled from 4 to 8
         
         # Add some randomness to the explosion
         self.angle = random.uniform(0, 2 * math.pi)
@@ -325,13 +331,20 @@ class Particle:
         self.alpha = max(0, self.alpha - self.fade_rate)
         self.lifetime -= 1
         
-        # Move particle outward from center if not at max distance
-        if self.distance < self.max_distance:
-            move_x = math.cos(self.angle) * self.speed
-            move_y = math.sin(self.angle) * self.speed
-            self.x += move_x
-            self.y += move_y
-            self.distance += self.speed
+        if self.is_ring:
+            # Update ring radius
+            self.ring_radius += self.ring_speed
+            # Fade out faster when ring gets larger
+            if self.ring_radius > CELL_SIZE:
+                self.alpha = max(0, self.alpha - self.fade_rate * 2)
+        else:
+            # Move particle outward from center if not at max distance
+            if self.distance < self.max_distance:
+                move_x = math.cos(self.angle) * self.speed
+                move_y = math.sin(self.angle) * self.speed
+                self.x += move_x
+                self.y += move_y
+                self.distance += self.speed
             
         print(f"Particle at ({self.x}, {self.y}) - alpha: {self.alpha}, lifetime: {self.lifetime}")
         
@@ -339,25 +352,40 @@ class Particle:
         if self.alpha <= 0:
             return
             
-        # Create surface for particle with alpha
-        particle_surface = pygame.Surface((self.max_radius * 2, self.max_radius * 2), pygame.SRCALPHA)
-        
-        # Draw outer glow
-        pygame.draw.circle(particle_surface, (*self.color, self.alpha // 2),
-                         (self.max_radius, self.max_radius), self.radius)
-        
-        # Draw inner core
-        pygame.draw.circle(particle_surface, (*self.color, self.alpha),
-                         (self.max_radius, self.max_radius), self.radius // 2)
-        
-        # Blit to main surface
-        surface.blit(particle_surface, 
-                    (self.x - self.max_radius, self.y - self.max_radius))
+        if self.is_ring:
+            # Create surface for ring with alpha
+            ring_surface = pygame.Surface((self.ring_radius * 4, self.ring_radius * 4), pygame.SRCALPHA)
+            
+            # Draw expanding ring
+            pygame.draw.circle(ring_surface, (*self.color, self.alpha),
+                             (self.ring_radius * 2, self.ring_radius * 2),
+                             self.ring_radius, self.ring_thickness)
+            
+            # Blit to main surface
+            surface.blit(ring_surface, 
+                        (self.x - self.ring_radius * 2, self.y - self.ring_radius * 2))
+        else:
+            # Create surface for particle with alpha
+            particle_surface = pygame.Surface((self.max_radius * 2, self.max_radius * 2), pygame.SRCALPHA)
+            
+            # Draw outer glow
+            pygame.draw.circle(particle_surface, (*self.color, self.alpha // 2),
+                             (self.max_radius, self.max_radius), self.radius)
+            
+            # Draw inner core
+            pygame.draw.circle(particle_surface, (*self.color, self.alpha),
+                             (self.max_radius, self.max_radius), self.radius // 2)
+            
+            # Blit to main surface
+            surface.blit(particle_surface, 
+                        (self.x - self.max_radius, self.y - self.max_radius))
         print(f"Drawing particle at ({self.x}, {self.y}) with alpha {self.alpha}")
         
     def is_dead(self):
         # Particle is dead when either its lifetime is up or it's fully faded out
-        is_dead = self.lifetime <= 0 or self.alpha <= 0
+        # For rings, also check if they've expanded too far
+        is_dead = (self.lifetime <= 0 or self.alpha <= 0 or 
+                  (self.is_ring and self.ring_radius > CELL_SIZE * 3))  # Increased from 2 to 3 tile diameters
         if is_dead:
             print(f"Particle at ({self.x}, {self.y}) is dead - lifetime: {self.lifetime}, alpha: {self.alpha}")
         return is_dead 

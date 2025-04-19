@@ -365,15 +365,36 @@ class Game:
             if projectile.progress >= 1.0:  # Only remove when progress reaches 1.0
                 print("Projectile reached target")
                 self.projectiles.remove(projectile)
-                # Create explosion particles at target
-                # Find the piece that launched this projectile
-                for piece in self.detonation_sequence:
-                    if (piece.x + CELL_SIZE // 2 == projectile.start_pos[0] and 
-                        piece.y + CELL_SIZE // 2 == projectile.start_pos[1]):
-                        # Create 40 particles (doubled from 20) with the piece's color
-                        for _ in range(40):
-                            self.particles.append(Particle(self, projectile.target_pos[0], projectile.target_pos[1], piece.base_color))
+                
+                # Check if projectile hit a target
+                target_hit = False
+                for target in self.targets[:]:  # Create a copy to safely remove items
+                    target_center_x = target.x + CELL_SIZE // 2
+                    target_center_y = target.y + CELL_SIZE // 2
+                    if (abs(projectile.target_pos[0] - target_center_x) < CELL_SIZE // 2 and 
+                        abs(projectile.target_pos[1] - target_center_y) < CELL_SIZE // 2):
+                        # Target hit! Create special ring explosion
+                        # Create expanding rings
+                        for i in range(3):  # Create 3 concentric rings
+                            self.particles.append(Particle(self, target_center_x, target_center_y, 
+                                                         (255, 0, 0), is_ring=True, ring_radius=i * 10))
+                        # Add some regular particles for extra effect
+                        for _ in range(20):
+                            self.particles.append(Particle(self, target_center_x, target_center_y, (255, 0, 0)))
+                        self.targets.remove(target)  # Remove the hit target
+                        target_hit = True
                         break
+                
+                if not target_hit:
+                    # Regular artillery explosion
+                    # Find the piece that launched this projectile
+                    for piece in self.detonation_sequence:
+                        if (piece.x + CELL_SIZE // 2 == projectile.start_pos[0] and 
+                            piece.y + CELL_SIZE // 2 == projectile.start_pos[1]):
+                            # Create 40 particles with the piece's color
+                            for _ in range(40):
+                                self.particles.append(Particle(self, projectile.target_pos[0], projectile.target_pos[1], piece.base_color))
+                            break
                 
         # Update all particles
         for particle in self.particles[:]:  # Create a copy of the list to safely remove items
