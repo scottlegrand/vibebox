@@ -364,7 +364,7 @@ class Game:
             if projectile.is_off_screen():
                 # Create explosion at projectile's final position
                 print(f"Creating explosion at ({projectile.x}, {projectile.y})")
-                for _ in range(16):  # Increased from 8 to 16 particles per explosion
+                for _ in range(32):  # Increased from 8 to 16 particles per explosion
                     particle = Particle(self, projectile.x, projectile.y, 
                                      self.detonation_sequence[0].base_color)  # Always use first piece's color
                     self.particles.append(particle)
